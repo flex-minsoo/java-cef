@@ -82,10 +82,25 @@ jobs:
           cd jcef_build
           ninja -j$(sysctl -n hw.ncpu)
 
-      - name: Build jcef.jar
+      # jcef.jar is built by the Ant target invoked from CMake's
+      # POST_BUILD step (native/CMakeLists.txt). That path uses build.xml's
+      # `target=1.8 source=1.8` setting and produces Java 8 bytecode where
+      # `private final native` methods get `invokespecial` dispatch — which
+      # is what JCEF's JNI lookup expects.
+      #
+      # We previously ran `tools/compile.sh` + `tools/make_jar.sh` here,
+      # but those use plain javac with the runner's default release (21 on
+      # macos-14). Java 21 emits `invokevirtual` for the same call sites
+      # and silently breaks key-event dispatch in the embedder.
+      #
+      # Ensure ant is on PATH. macos-14 runners ship it by default but
+      # belt-and-braces.
+      - name: Ensure ant is installed
         run: |
-          ./tools/compile.sh ${{ matrix.dist_platform }}
-          ./tools/make_jar.sh ${{ matrix.dist_platform }}
+          if ! command -v ant >/dev/null 2>&1; then
+            brew install ant
+          fi
+          ant -version
 
       # Stage the install-dir layout that flex-ax-desktop's KcefBootstrap
       # expects: dylib + framework + helper apps flat at the root.
@@ -114,12 +129,26 @@ jobs:
 
       # Upload jcef.jar only from arm64 — it's the same Java classes on both
       # archs, so we don't need duplicates as release assets.
+      #
+      # Strip MANIFEST.MF before publishing. The default jar carries
+      # `Automatic-Module-Name: jcef`, which makes the JVM promote it to an
+      # automatic JPMS module at runtime. That collides with JBR's bundled
+      # `jcef.jmod` (different commit, different native ABI) and silently
+      # breaks key event dispatch in the embedder. Dropping the manifest
+      # keeps everything on the classpath where our exclude rules can take
+      # effect deterministically.
       - name: Stage jcef.jar (arm64 only)
         if: matrix.arch == 'arm64'
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
-          cp out/${{ matrix.dist_platform }}/jcef.jar "jcef-flex-${TAG}.jar"
-          shasum -a 256 "jcef-flex-${TAG}.jar" | tee "jcef-flex-${TAG}.jar.sha256"
+          SRC="jcef_build/native/Release/jcef.jar"
+          DST="jcef-flex-${TAG}.jar"
+          cp "$SRC" "$DST"
+          # Drop MANIFEST.MF — its Automatic-Module-Name=jcef collides with
+          # JBR's bundled jcef.jmod when this jar lands on the classpath of
+          # an embedder that runs on JBR.
+          zip -d "$DST" META-INF/MANIFEST.MF || true
+          shasum -a 256 "$DST" | tee "$DST.sha256"
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2
