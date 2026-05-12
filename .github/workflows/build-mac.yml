@@ -106,9 +106,11 @@ jobs:
           STAGE="$RUNNER_TEMP/stage"
           TAG="${{ steps.tag.outputs.tag }}"
           ASSET="jcef-flex-${TAG}-${{ matrix.dist_platform }}.tar.gz"
+          # tar runs from $GITHUB_WORKSPACE (the default cwd), so the output
+          # lands there directly. No mv needed — the upload step globs from
+          # the workspace root.
           tar -C "$STAGE" -czf "$ASSET" .
           shasum -a 256 "$ASSET" | tee "${ASSET}.sha256"
-          mv "$ASSET" "${ASSET}.sha256" "$GITHUB_WORKSPACE/"
 
       # Upload jcef.jar only from arm64 — it's the same Java classes on both
       # archs, so we don't need duplicates as release assets.
