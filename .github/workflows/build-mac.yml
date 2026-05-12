@@ -4,6 +4,10 @@ name: Build JCEF (macOS)
 # Framework.framework + Helper apps + jcef.jar) for both Apple Silicon and
 # x86_64, and uploads them as release assets.
 #
+# Windows is built in a separate workflow (.github/workflows/build-windows.yml)
+# to keep the per-platform setup steps readable. Both attach to the same
+# release tag.
+#
 # Trigger forms:
 #  - Tag push matching v*-ime.* (e.g. v135.0.20-ime.1) → creates a release.
 #  - workflow_dispatch with input `version` (no leading v) → uploads to a

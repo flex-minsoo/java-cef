@@ -1,0 +1,128 @@
+name: Build JCEF (Windows)
+
+# Builds the JCEF native distribution (jcef.dll + libcef.dll + helper.exe
+# + supporting DLLs / .pak / .bin + jcef.jar) for Windows x86_64 and
+# uploads it to the same release tag the macOS workflow targets.
+#
+# Status: untested as of v135.0.20-ime.2. The IMM32 IME relay
+# (osr_ime_host_win.{h,cc}) is a dry-coded skeleton that needs verification
+# on a real Windows session. Expect a follow-up commit once a teammate
+# actually opens AgentHub on a Windows build of flex Desk.
+
+on:
+  push:
+    tags:
+      - 'v*-ime.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to attach assets to (e.g. v135.0.20-ime.2). Tag must already exist.'
+        required: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # CEF binary distribution is ~700MB compressed. Cache per CEF_VERSION
+      # so iterative workflow tweaks don't redownload it every time.
+      - name: Cache CEF distribution
+        uses: actions/cache@v4
+        with:
+          path: third_party/cef
+          key: cef-windows64-135.0.20
+
+      # Ninja is in the windows-2022 image already, but make it explicit so
+      # the cmake -G choice is deterministic regardless of which compilers
+      # ship by default.
+      - name: Set up MSBuild / VS 2022 dev shell
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure (CMake + Ninja)
+        shell: cmd
+        run: |
+          mkdir jcef_build
+          cd jcef_build
+          cmake -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DPROJECT_ARCH=x86_64 ^
+            ..
+
+      - name: Build native (ninja + ant)
+        shell: cmd
+        run: |
+          cd jcef_build
+          ninja -j%NUMBER_OF_PROCESSORS%
+
+      # Stage the install-dir layout that flex-ax-desktop's KcefBootstrap
+      # expects. On Windows, jcefmaven's CefAppBuilder.setInstallDir() wants
+      # the .dll / .exe / .pak / .bin files flat at the root — same as the
+      # macOS layout but with Windows-shaped binaries.
+      - name: Stage install-dir layout
+        shell: pwsh
+        run: |
+          $stage = "$env:RUNNER_TEMP\stage"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          $rel = "jcef_build\native\Release"
+          # Copy everything that isn't an intermediate object or test exe.
+          # The full Release dir contains a handful of *.lib + *.pdb files
+          # we don't need at runtime; exclude them to keep the tarball
+          # under control.
+          Get-ChildItem -Path $rel -File | Where-Object {
+            $_.Extension -notin '.lib', '.pdb', '.exp', '.ilk'
+          } | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination $stage
+          }
+          # Locales directory carries Chromium's .pak files for each UI
+          # language — required for CEF to start.
+          if (Test-Path "$rel\locales") {
+            Copy-Item -Recurse -Path "$rel\locales" -Destination $stage
+          }
+          Get-ChildItem $stage
+
+      - name: Package tar.gz
+        shell: bash
+        run: |
+          STAGE="$RUNNER_TEMP/stage"
+          TAG="${{ steps.tag.outputs.tag }}"
+          ASSET="jcef-flex-${TAG}-windows64.tar.gz"
+          # bsdtar (ships with Windows 10+) understands -z and matches what
+          # the macOS workflow produces, so flex-ax-desktop's extractTarGz
+          # `tar -xzf` works without per-platform shims.
+          tar -C "$STAGE" -czf "$ASSET" .
+          # shasum isn't on Windows by default but `certutil -hashfile` is.
+          # Normalise the output to `<hex>  <filename>` so KcefBootstrap's
+          # sha checks read the same way as macOS.
+          HASH=$(certutil -hashfile "$ASSET" SHA256 | sed -n '2p' | tr -d ' \r')
+          echo "$HASH  $ASSET" | tee "${ASSET}.sha256"
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          files: |
+            jcef-flex-*-windows64.tar.gz
+            jcef-flex-*-windows64.tar.gz.sha256
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
