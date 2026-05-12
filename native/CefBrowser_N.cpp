@@ -28,6 +28,10 @@
 #include "osr_ime_host_mac.h"
 #endif
 
+#if defined(OS_WIN)
+#include "osr_ime_host_win.h"
+#endif
+
 #if defined(OS_LINUX)
 #define XK_3270  // for XK_3270_BackTab
 #include <X11/XF86keysym.h>
@@ -2087,6 +2091,15 @@ Java_org_cef_browser_CefBrowser_1N_N_1OsrAttachImeMac(JNIEnv* env,
                            reinterpret_cast<void*>(glCanvasSurfaceHandle),
                            browser);
 #endif
+#if defined(OS_WIN)
+  // On Windows the Java side passes the GLCanvas's HWND in `nsWindowHandle`
+  // (the parameter name is historical; we don't bother renaming it because
+  // the Kotlin caller doesn't see the variable name).
+  CefRefPtr<CefBrowser> browser = JNI_GET_BROWSER_OR_RETURN(env, obj);
+  osr_ime_host_win::Attach(reinterpret_cast<void*>(nsWindowHandle),
+                           reinterpret_cast<void*>(glCanvasSurfaceHandle),
+                           browser);
+#endif
 }
 
 JNIEXPORT void JNICALL
@@ -2096,6 +2109,10 @@ Java_org_cef_browser_CefBrowser_1N_N_1OsrSetImeActive(JNIEnv* env,
                                                       jboolean active) {
 #if defined(OS_MACOSX)
   osr_ime_host_mac::SetActive(reinterpret_cast<void*>(nsWindowHandle),
+                              active == JNI_TRUE);
+#endif
+#if defined(OS_WIN)
+  osr_ime_host_win::SetActive(reinterpret_cast<void*>(nsWindowHandle),
                               active == JNI_TRUE);
 #endif
 }

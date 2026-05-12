@@ -167,6 +167,8 @@ set(JCEF_SRCS_WINDOWS
   critical_wait_win.cpp
   jni_util_win.cpp
   jcef_dll.rc
+  osr_ime_host_win.h
+  osr_ime_host_win.cc
   temp_window_win.cc
   temp_window_win.h
   util_win.cpp
