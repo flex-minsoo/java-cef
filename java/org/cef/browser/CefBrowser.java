@@ -253,6 +253,51 @@ public interface CefBrowser {
     public void setFocus(boolean enable);
 
     /**
+     * Begin or update an IME composition (preedit). Used in OSR mode to deliver
+     * composed text from the host's input method (e.g. Korean Hangul, Japanese kana,
+     * Chinese pinyin) into the focused editable element. Default is a no-op so
+     * non-OSR implementations don't need to override.
+     *
+     * @param text       the composed (preedit) text. Empty string clears composition.
+     * @param cursorPos  caret position within the composition (UTF-16 code units).
+     */
+    public default void imeSetComposition(String text, int cursorPos) {}
+
+    /**
+     * Commit (finalize) text into the focused editable. Replaces any current composition.
+     * Default is a no-op.
+     *
+     * @param text                the text to commit. May be a single grapheme or longer.
+     * @param relativeCursorPos   caret position relative to the end of the commit.
+     */
+    public default void imeCommitText(String text, int relativeCursorPos) {}
+
+    /**
+     * Finalize the current composition without changing the text. Default is a no-op.
+     *
+     * @param keepSelection if true, retain the current selection.
+     */
+    public default void imeFinishComposingText(boolean keepSelection) {}
+
+    /**
+     * Cancel the current composition, discarding the preedit. Default is a no-op.
+     */
+    public default void imeCancelComposition() {}
+
+    /**
+     * Install the macOS NSTextInputClient IME relay onto the given NSWindow.
+     * Default no-op for non-OSR or non-macOS implementations.
+     */
+    public default void osrAttachImeMac(long nsWindowHandle, long glCanvasSurfaceHandle) {}
+
+    /**
+     * Toggle whether the IME relay should reclaim first-responder when AWT
+     * steals it. Pass `false` when the OSR area is no longer focused so the
+     * window can route keystrokes elsewhere; `true` to reactivate.
+     */
+    public default void osrSetImeActive(long nsWindowHandle, boolean active) {}
+
+    /**
      * Set whether the window containing the browser is visible
      * (minimized/unminimized, app hidden/unhidden, etc). Only used on Mac OS X.
      * @param visible

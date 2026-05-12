@@ -456,6 +456,62 @@ Java_org_cef_browser_CefBrowser_1N_N_1SendMouseWheelEvent(JNIEnv*,
 
 /*
  * Class:     org_cef_browser_CefBrowser_N
+ * Method:    N_ImeSetComposition
+ * Signature: (Ljava/lang/String;I)V
+ */
+JNIEXPORT void JNICALL
+Java_org_cef_browser_CefBrowser_1N_N_1ImeSetComposition(JNIEnv*,
+                                                        jobject,
+                                                        jstring,
+                                                        jint);
+
+/*
+ * Class:     org_cef_browser_CefBrowser_N
+ * Method:    N_ImeCommitText
+ * Signature: (Ljava/lang/String;I)V
+ */
+JNIEXPORT void JNICALL
+Java_org_cef_browser_CefBrowser_1N_N_1ImeCommitText(JNIEnv*,
+                                                    jobject,
+                                                    jstring,
+                                                    jint);
+
+/*
+ * Class:     org_cef_browser_CefBrowser_N
+ * Method:    N_ImeFinishComposingText
+ * Signature: (Z)V
+ */
+JNIEXPORT void JNICALL
+Java_org_cef_browser_CefBrowser_1N_N_1ImeFinishComposingText(JNIEnv*,
+                                                             jobject,
+                                                             jboolean);
+
+/*
+ * Class:     org_cef_browser_CefBrowser_N
+ * Method:    N_ImeCancelComposition
+ * Signature: ()V
+ */
+JNIEXPORT void JNICALL
+Java_org_cef_browser_CefBrowser_1N_N_1ImeCancelComposition(JNIEnv*, jobject);
+
+/*
+ * Class:     org_cef_browser_CefBrowser_N
+ * Method:    N_OsrAttachImeMac
+ * Signature: (JJ)V
+ */
+JNIEXPORT void JNICALL
+Java_org_cef_browser_CefBrowser_1N_N_1OsrAttachImeMac(JNIEnv*, jobject, jlong, jlong);
+
+/*
+ * Class:     org_cef_browser_CefBrowser_N
+ * Method:    N_OsrSetImeActive
+ * Signature: (JZ)V
+ */
+JNIEXPORT void JNICALL
+Java_org_cef_browser_CefBrowser_1N_N_1OsrSetImeActive(JNIEnv*, jobject, jlong, jboolean);
+
+/*
+ * Class:     org_cef_browser_CefBrowser_N
  * Method:    N_DragTargetDragEnter
  * Signature: (Lorg/cef/callback/CefDragData;Ljava/awt/Point;II)V
  */

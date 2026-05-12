@@ -279,22 +279,11 @@ elseif(OS_LINUX)
   set(GS_OUTPATH "linux64/clang-format")
 endif()
 
-message(STATUS "Downloading clang-format from Google Storage...")
-execute_process(
-  COMMAND "${PYTHON_EXECUTABLE}"
-          "tools/buildtools/download_from_google_storage.py"
-          "--no_resume"
-          "--platform=${GS_PLATFORM}"
-          "--no_auth"
-          "--bucket" "chromium-clang-format"
-          "-s" "tools/buildtools/${GS_HASHPATH}"
-          "-o" "tools/buildtools/${GS_OUTPATH}"
-  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-  RESULT_VARIABLE EXECUTE_RV
-  )
-if(NOT EXECUTE_RV STREQUAL "0")
-  message(FATAL_ERROR "Execution failed with unexpected result: ${EXECUTE_RV}")
-endif()
+# clang-format is a pre-commit linting tool, not required to build JCEF natives.
+# The gsutil-based download breaks on modern Python (3.12+) because gsutil depends on
+# 'six.moves' which is no longer available. We skip the download entirely; if anyone
+# needs clang-format for committing, they can install it via brew / apt.
+message(STATUS "Skipping clang-format download (not required for build).")
 
 
 #

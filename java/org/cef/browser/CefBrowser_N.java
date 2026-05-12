@@ -668,6 +668,94 @@ abstract class CefBrowser_N extends CefNativeAdapter implements CefBrowser {
     }
 
     /**
+     * Begin or update an IME composition (preedit). Replaces the current composition,
+     * if any, with {@code text}. A single underline spanning the whole composition is
+     * applied — this is sufficient for Korean Hangul; Japanese/Chinese clients that
+     * want segmented underlines can extend this.
+     *
+     * @param text       the composed (preedit) text, may be empty (clears composition).
+     * @param cursorPos  caret position within the composition, in UTF-16 code units.
+     */
+    public final void imeSetComposition(String text, int cursorPos) {
+        try {
+            N_ImeSetComposition(text == null ? "" : text, cursorPos);
+        } catch (UnsatisfiedLinkError ule) {
+            ule.printStackTrace();
+        }
+    }
+
+    /**
+     * Commit (finalize) {@code text} into the focused editable. Replaces any current
+     * composition with the committed text.
+     *
+     * @param text               the text to commit. May be a single character or a string.
+     * @param relativeCursorPos  caret position relative to the end of the commit, in UTF-16
+     *                           code units. 0 = caret immediately after the inserted text.
+     */
+    public final void imeCommitText(String text, int relativeCursorPos) {
+        try {
+            N_ImeCommitText(text == null ? "" : text, relativeCursorPos);
+        } catch (UnsatisfiedLinkError ule) {
+            ule.printStackTrace();
+        }
+    }
+
+    /**
+     * Finalize the current composition without changing the text. Equivalent to
+     * accepting whatever the IME has currently composed.
+     *
+     * @param keepSelection if true, retain the current text selection after finishing.
+     */
+    public final void imeFinishComposingText(boolean keepSelection) {
+        try {
+            N_ImeFinishComposingText(keepSelection);
+        } catch (UnsatisfiedLinkError ule) {
+            ule.printStackTrace();
+        }
+    }
+
+    /**
+     * Cancel the current composition. Discards any preedit text the IME was assembling.
+     */
+    public final void imeCancelComposition() {
+        try {
+            N_ImeCancelComposition();
+        } catch (UnsatisfiedLinkError ule) {
+            ule.printStackTrace();
+        }
+    }
+
+    /**
+     * Install the macOS NSTextInputClient IME relay onto the NSWindow that hosts the
+     * GLCanvas, enabling Korean/Japanese/Chinese composition input in OSR mode.
+     *
+     * @param nsWindowHandle native NSWindow pointer (e.g. from JOGL JAWTWindow.windowHandle)
+     * @param glCanvasSurfaceHandle native handle of the JOGL drawing surface (size hint;
+     *                              may be 0 if unavailable)
+     */
+    public final void osrAttachImeMac(long nsWindowHandle, long glCanvasSurfaceHandle) {
+        try {
+            N_OsrAttachImeMac(nsWindowHandle, glCanvasSurfaceHandle);
+        } catch (UnsatisfiedLinkError ule) {
+            ule.printStackTrace();
+        }
+    }
+
+    /**
+     * Tells the macOS IME relay whether the OSR area is currently the user's
+     * focus target. When `false`, the relay yields first-responder and stops
+     * reclaiming it on resign, so other text inputs in the same window can
+     * accept keystrokes again. Pass `true` when the OSR area regains focus.
+     */
+    public final void osrSetImeActive(long nsWindowHandle, boolean active) {
+        try {
+            N_OsrSetImeActive(nsWindowHandle, active);
+        } catch (UnsatisfiedLinkError ule) {
+            ule.printStackTrace();
+        }
+    }
+
+    /**
      * Call this method when the user drags the mouse into the web view (before
      * calling DragTargetDragOver/DragTargetLeave/DragTargetDrop).
      * |drag_data| should not contain file contents as this type of data is not
@@ -871,6 +959,13 @@ abstract class CefBrowser_N extends CefNativeAdapter implements CefBrowser {
     private final native void N_SendKeyEvent(KeyEvent e);
     private final native void N_SendMouseEvent(MouseEvent e);
     private final native void N_SendMouseWheelEvent(MouseWheelEvent e);
+    private final native void N_ImeSetComposition(String text, int cursorPos);
+    private final native void N_ImeCommitText(String text, int relativeCursorPos);
+    private final native void N_ImeFinishComposingText(boolean keepSelection);
+    private final native void N_ImeCancelComposition();
+    private final native void N_OsrAttachImeMac(long nsWindowHandle, long glCanvasSurfaceHandle);
+
+    private final native void N_OsrSetImeActive(long nsWindowHandle, boolean active);
     private final native void N_DragTargetDragEnter(
             CefDragData dragData, Point pos, int modifiers, int allowed_ops);
     private final native void N_DragTargetDragOver(Point pos, int modifiers, int allowed_ops);

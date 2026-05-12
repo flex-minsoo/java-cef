@@ -24,6 +24,10 @@
 #include "temp_window.h"
 #include "window_handler.h"
 
+#if defined(OS_MACOSX)
+#include "osr_ime_host_mac.h"
+#endif
+
 #if defined(OS_LINUX)
 #define XK_3270  // for XK_3270_BackTab
 #include <X11/XF86keysym.h>
@@ -2005,6 +2009,95 @@ Java_org_cef_browser_CefBrowser_1N_N_1SendMouseWheelEvent(
     deltaY = delta;
 
   browser->GetHost()->SendMouseWheelEvent(cef_event, deltaX, deltaY);
+}
+
+// -- IME / Text Input ----------------------------------------------------------
+// Exposes CefBrowserHost::Ime{SetComposition,CommitText,FinishComposingText,
+// CancelComposition} to Java callers. This is needed for languages that compose
+// characters via an IME (Korean, Japanese, Chinese) when running in OSR mode —
+// without these, the host has no way to deliver composition events to Blink.
+//
+// MVP scope:
+//  - A single underline spanning the whole composition (sufficient for Korean
+//    Hangul which has no candidate list). Japanese/Chinese can refine later by
+//    accepting an underline array.
+//  - replacement_range is always passed as INVALID; selection_range is set to
+//    (cursorPos, cursorPos) so the caret stays where the host requested.
+
+JNIEXPORT void JNICALL
+Java_org_cef_browser_CefBrowser_1N_N_1ImeSetComposition(JNIEnv* env,
+                                                        jobject obj,
+                                                        jstring jtext,
+                                                        jint cursor_pos) {
+  CefRefPtr<CefBrowser> browser = JNI_GET_BROWSER_OR_RETURN(env, obj);
+  CefString text = GetJNIString(env, jtext);
+  std::vector<CefCompositionUnderline> underlines;
+  if (!text.empty()) {
+    CefCompositionUnderline u;
+    u.range.from = 0;
+    u.range.to = static_cast<uint32_t>(text.length());
+    u.color = 0xFF000000;       // opaque black
+    u.background_color = 0;
+    u.thick = 0;
+    u.style = CEF_CUS_SOLID;
+    underlines.push_back(u);
+  }
+  CefRange replacement_range(UINT32_MAX, UINT32_MAX);  // INVALID — replace nothing extra
+  CefRange selection_range(static_cast<uint32_t>(cursor_pos),
+                           static_cast<uint32_t>(cursor_pos));
+  browser->GetHost()->ImeSetComposition(text, underlines, replacement_range,
+                                        selection_range);
+}
+
+JNIEXPORT void JNICALL
+Java_org_cef_browser_CefBrowser_1N_N_1ImeCommitText(JNIEnv* env,
+                                                    jobject obj,
+                                                    jstring jtext,
+                                                    jint relative_cursor_pos) {
+  CefRefPtr<CefBrowser> browser = JNI_GET_BROWSER_OR_RETURN(env, obj);
+  CefString text = GetJNIString(env, jtext);
+  CefRange replacement_range(UINT32_MAX, UINT32_MAX);  // INVALID
+  browser->GetHost()->ImeCommitText(text, replacement_range,
+                                    static_cast<int>(relative_cursor_pos));
+}
+
+JNIEXPORT void JNICALL
+Java_org_cef_browser_CefBrowser_1N_N_1ImeFinishComposingText(JNIEnv* env,
+                                                             jobject obj,
+                                                             jboolean keep_selection) {
+  CefRefPtr<CefBrowser> browser = JNI_GET_BROWSER_OR_RETURN(env, obj);
+  browser->GetHost()->ImeFinishComposingText(keep_selection == JNI_TRUE);
+}
+
+JNIEXPORT void JNICALL
+Java_org_cef_browser_CefBrowser_1N_N_1ImeCancelComposition(JNIEnv* env,
+                                                           jobject obj) {
+  CefRefPtr<CefBrowser> browser = JNI_GET_BROWSER_OR_RETURN(env, obj);
+  browser->GetHost()->ImeCancelComposition();
+}
+
+JNIEXPORT void JNICALL
+Java_org_cef_browser_CefBrowser_1N_N_1OsrAttachImeMac(JNIEnv* env,
+                                                      jobject obj,
+                                                      jlong nsWindowHandle,
+                                                      jlong glCanvasSurfaceHandle) {
+#if defined(OS_MACOSX)
+  CefRefPtr<CefBrowser> browser = JNI_GET_BROWSER_OR_RETURN(env, obj);
+  osr_ime_host_mac::Attach(reinterpret_cast<void*>(nsWindowHandle),
+                           reinterpret_cast<void*>(glCanvasSurfaceHandle),
+                           browser);
+#endif
+}
+
+JNIEXPORT void JNICALL
+Java_org_cef_browser_CefBrowser_1N_N_1OsrSetImeActive(JNIEnv* env,
+                                                      jobject obj,
+                                                      jlong nsWindowHandle,
+                                                      jboolean active) {
+#if defined(OS_MACOSX)
+  osr_ime_host_mac::SetActive(reinterpret_cast<void*>(nsWindowHandle),
+                              active == JNI_TRUE);
+#endif
 }
 
 JNIEXPORT void JNICALL

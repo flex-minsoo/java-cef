@@ -153,8 +153,12 @@ set(JCEF_SRCS_LINUX
   )
 set(JCEF_SRCS_MAC
   critical_wait_posix.cpp
+  osr_ime_host_mac.h
+  osr_ime_host_mac.mm
   temp_window_mac.h
   temp_window_mac.mm
+  text_input_client_osr_mac.h
+  text_input_client_osr_mac.mm
   util_mac.h
   util_mac.mm
   util_posix.cpp
