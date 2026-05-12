@@ -1,0 +1,133 @@
+name: Build JCEF (macOS)
+
+# Builds the JCEF native distribution (libjcef.dylib + Chromium Embedded
+# Framework.framework + Helper apps + jcef.jar) for both Apple Silicon and
+# x86_64, and uploads them as release assets.
+#
+# Trigger forms:
+#  - Tag push matching v*-ime.* (e.g. v135.0.20-ime.1) → creates a release.
+#  - workflow_dispatch with input `version` (no leading v) → uploads to a
+#    pre-existing draft release named `v<version>-ime.<n>`.
+#
+# The "ime.N" suffix in the tag distinguishes our patch revisions from
+# upstream CEF version bumps. Bump it whenever the IME patch series changes
+# but the underlying CEF version stays the same.
+
+on:
+  push:
+    tags:
+      - 'v*-ime.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to attach assets to (e.g. v135.0.20-ime.1). Tag must already exist.'
+        required: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+            cef_platform: macosarm64
+            dist_platform: macosarm64
+          - runner: macos-13
+            arch: x64
+            cef_platform: macosx64
+            dist_platform: macosx64
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # The CEF binary distribution is large (~700MB compressed) and stable
+      # per CEF_VERSION. Cache it across runs to cut build time roughly in
+      # half on warm CI.
+      - name: Cache CEF distribution
+        uses: actions/cache@v4
+        with:
+          path: third_party/cef
+          key: cef-${{ matrix.cef_platform }}-135.0.20
+
+      - name: Configure (CMake + Ninja)
+        run: |
+          brew install ninja
+          mkdir -p jcef_build
+          cd jcef_build
+          cmake -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPROJECT_ARCH=${{ matrix.arch == 'arm64' && 'arm64' || 'x86_64' }} \
+            ..
+
+      - name: Build native
+        run: |
+          cd jcef_build
+          ninja -j$(sysctl -n hw.ncpu)
+
+      - name: Build jcef.jar
+        run: |
+          ./tools/compile.sh ${{ matrix.dist_platform }}
+          ./tools/make_jar.sh ${{ matrix.dist_platform }}
+
+      # Stage the install-dir layout that flex-ax-desktop's KcefBootstrap
+      # expects: dylib + framework + helper apps flat at the root.
+      - name: Stage install-dir layout
+        run: |
+          STAGE="$RUNNER_TEMP/stage"
+          mkdir -p "$STAGE"
+          REL=jcef_build/native/Release
+          cp -R "$REL/libjcef.dylib" "$STAGE/"
+          cp -R "$REL"/jcef_app.app/Contents/Frameworks/"Chromium Embedded Framework.framework" "$STAGE/"
+          for app in "$REL"/jcef_app.app/Contents/Frameworks/jcef\ Helper*.app; do
+            cp -R "$app" "$STAGE/"
+          done
+          ls -la "$STAGE"
+
+      - name: Package tar.gz
+        run: |
+          STAGE="$RUNNER_TEMP/stage"
+          TAG="${{ steps.tag.outputs.tag }}"
+          ASSET="jcef-flex-${TAG}-${{ matrix.dist_platform }}.tar.gz"
+          tar -C "$STAGE" -czf "$ASSET" .
+          shasum -a 256 "$ASSET" | tee "${ASSET}.sha256"
+          mv "$ASSET" "${ASSET}.sha256" "$GITHUB_WORKSPACE/"
+
+      # Upload jcef.jar only from arm64 — it's the same Java classes on both
+      # archs, so we don't need duplicates as release assets.
+      - name: Stage jcef.jar (arm64 only)
+        if: matrix.arch == 'arm64'
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          cp out/${{ matrix.dist_platform }}/jcef.jar "jcef-flex-${TAG}.jar"
+          shasum -a 256 "jcef-flex-${TAG}.jar" | tee "jcef-flex-${TAG}.jar.sha256"
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          files: |
+            jcef-flex-*.tar.gz
+            jcef-flex-*.tar.gz.sha256
+            jcef-flex-*.jar
+            jcef-flex-*.jar.sha256
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
